@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Profile Stats</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>GitHub Profile Stats</h1>
+        <form id="githubForm">
+            <input type="text" id="githubId" name="githubId" placeholder="Enter GitHub ID">
+            <input type="submit" value="Get Profile">
+        </form>
+        <div id="profile" style="display: none;">
+            <img id="avatar" src="" alt="Profile Picture">
+            <p id="name"></p>
+            <div class="achievements">
+                <div class="achievement">
+                    <svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true" class="octicon octicon-repo mr-1 color-fg-muted" fill="#fff">
+                        <path d="M2 2.5A2.5 2.5 0 0 1 4.5 0h8.75a.75.75 0 0 1 .75.75v12.5a.75.75 0 0 1-.75.75h-2.5a.75.75 0 0 1 0-1.5h1.75v-2h-8a1 1 0 0 0-.714 1.7.75.75 0 1 1-1.072 1.05A2.495 2.495 0 0 1 2 11.5Zm10.5-1h-8a1 1 0 0 0-1 1v6.708A2.486 2.486 0 0 1 4.5 9h8ZM5 12.25a.25.25 0 0 1 .25-.25h3.5a.25.25 0 0 1 .25.25v3.25a.25.25 0 0 1-.4.2l-1.45-1.087a.249.249 0 0 0-.3 0L5.4 15.7a.25.25 0 0 1-.4-.2Z"></path>
+                    </svg>
+                    <span id="publicRepos">Public Repositories</span>
+                </div>
+                <div class="achievement">
+                    <span id="publicGists"></span>
+                </div>
+                <div class="achievement">
+                    <span id="followers"></span>
+                </div>
+            </div>
+            <p id="bio"></p>
+            <p id="repositories"></p>
+            <canvas id="contributionMap" width="600" height="120"></canvas>
+            <div class="repo-container" id="reposList"></div>
+            <p id="links"></p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('githubForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var githubId = document.getElementById('githubId').value;
+            fetchProfile(githubId);
+        });
+
+        function fetchProfile(githubId) {
+            fetch('https://api.github.com/users/' + githubId)
+            .then(response => response.json())
+            .then(data => {
+                if (data.message === 'Not Found') {
+                    alert('GitHub user not found!');
+                    return;
+                }
+                displayProfile(data);
+                fetchRepositories(githubId);
+                fetchContributionData(githubId);
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function displayProfile(profile) {
+            document.getElementById('avatar').src = profile.avatar_url;
+            document.getElementById('name').textContent = 'Name: ' + profile.name;
+            document.getElementById('publicRepos').textContent = profile.public_repos ? profile.public_repos : '0';
+            document.getElementById('publicGists').textContent = profile.public_gists ? profile.public_gists : '0';
+            document.getElementById('followers').textContent = profile.followers ? profile.followers : '0';
+            document.getElementById('bio').textContent = 'Bio: ' + (profile.bio ? profile.bio : 'No bio provided');
+            document.getElementById('repositories').textContent = 'Public Repositories: ' + profile.public_repos;
+            document.getElementById('links').innerHTML = 'GitHub Profile: <a href="' + profile.html_url + '" target="_blank">' + profile.html_url + '</a>';
+            document.getElementById('profile').style.display = 'block';
+        }
+
+        function fetchRepositories(githubId) {
+            fetch('https://api.github.com/users/' + githubId + '/repos')
+            .then(response => response.json())
+            .then(repos => displayRepositories(repos))
+            .catch(error => console.error('Error fetching repositories:', error));
+        }
+
+        function displayRepositories(repos) {
+            const repoList = document.getElementById('reposList');
+            repoList.innerHTML = ''; // Clear previous repositories
+            repos.forEach(repo => {
+                const repoDiv = document.createElement('div');
+                repoDiv.classList.add('repo');
+                repoDiv.innerHTML = `
+                    <h3>${repo.name}</h3>
+                    <p>Description: ${repo.description ? repo.description : 'No description'}</p>
+                    <p>Language: ${repo.language ? repo.language : 'Not specified'}</p>
+                    <p>Stars: ${repo.stargazers_count}</p>
+                    <p>Forks: ${repo.forks_count}</p>
+                    <p><a href="${repo.html_url}" target="_blank">View on GitHub</a></p>
+                    <canvas id="chart-${repo.name.replace(/\s+/g, '-')}" width="100" height="50"></canvas>
+                `;
+                repoList.appendChild(repoDiv);
+                drawChart(repo);
+            });
+        }
+
+        function drawChart(repo) {
+            const ctx = document.getElementById(`chart-${repo.name.replace(/\s+/g, '-')}`).getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Stars', 'Forks'],
+                    datasets: [{
+                        label: 'Stats',
+                        data: [repo.stargazers_count, repo.forks_count],
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.5)',
+                            'rgba(54, 162, 235, 0.5)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function fetchContributionData(githubId) {
+            fetch('https://github-contributions-api.now.sh/v1/' + githubId)
+            .then(response => response.json())
+            .then(data => {
+                drawContributionMap(data);
+            })
+            .catch(error => console.error('Error fetching contribution data:', error));
+        }
+
+        function drawContributionMap(data) {
+            const ctx = document.getElementById('contributionMap').getContext('2d');
+            new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        data: data.contributions.map((count, index) => ({ x: index % 7, y: Math.floor(index / 7), value: count })),
+                        pointStyle: function(context) {
+                            const value = context.dataset.data[context.dataIndex].value;
+                            const color = value === 0 ? 'rgba(220,220,220,0.1)' : 'rgba(66,133,244,' + (value / 100) + ')';
+                            return {
+                                radius: 10,
+                                backgroundColor: color,
+                                borderWidth: 1,
+                                borderColor: 'rgba(255,255,255,0.8)'
+                            };
+                        }
+                    }]
+                },
+                options: {
+                    aspectRatio: 4,
+                    legend: {
+                        display: false
+                    },
+                    tooltips: {
+                        enabled: false
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
